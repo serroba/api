@@ -1,0 +1,445 @@
+swagger: '2.0'
+info:
+  title: BigCommerce Checkout API Data Model
+  description: api for building carts in BigCommerce
+  version: v0.0.1
+
+host: unknown
+
+schemes:
+  - https
+basePath: /internalapi/v1/
+
+produces:
+  - application/json
+
+paths:
+  /checkouts/{id}:
+    get:
+      summary: Retrieve a Checkout by its ID
+      description: "A checkout is a collection of multiple entities. Cart, Addresses, Shipping options and more"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: Returns checkout object.
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Checkout'
+              meta:
+                $ref: '#/definitions/Meta'
+        default:
+          description: Unknown error.
+          schema:
+            $ref: '#/definitions/UnknownError'
+        400:
+          description: "When a problem arises, for now a generic response"
+          schema:
+            $ref: '#/definitions/CheckoutError'
+
+
+definitions:
+  Checkout:
+    type: object
+    properties:
+      id:
+        type: string
+        format: UUID
+      cart:
+        $ref: "#/definitions/Cart"
+      shopper:
+        $ref: "#/definitions/Shopper"
+      billing_address:
+        $ref: "#/definitions/Address"
+      shipping_addresses:
+        type: array
+        items:
+          $ref: "#/definitions/Address"
+      consignments:
+        type: array
+        items:
+          $ref: "#/definitions/Consignment"
+      currency:
+        $ref: "#/definitions/Currency"
+      taxes:
+        type: array
+        items:
+          $ref: "#/definitions/Tax"
+      discounts:
+        description: "Discounts applied after addresses have been applied"
+        type: array
+        items:
+          $ref: "#/definitions/AppliedDiscount"
+      coupons:
+        description: "Coupons applied at checkout level."
+        type: array
+        items:
+          $ref: "#/definitions/AppliedCoupon"
+      order_id:
+        type: string
+      shipping_cost:
+        type: number
+      tax_total:
+        type: number
+      grand_total:
+        type: number
+      store_credit:
+        type: number
+      gift_certificates:
+        type: array
+        items:
+          $ref: "#/definitions/GiftCertificate"
+      balance_due:
+        type: number
+        description: "The amount due to be paid after applying Store Credit and Gift Certificates"
+  Cart:
+    description: "A cart contains a collection of items, their prices, but does not contain data that is associated with the customer"
+    type: object
+    properties:
+      id:
+        description: Cart id given after creating a cart with POST.
+        type: string
+        format: UUID
+      recovery_cart_url:
+        type: string
+        format: uri
+      created_time:
+        type: string
+        format: ISO-8601
+        description: Time Cart was created.
+      updated_time:
+        type: string
+        format: ISO-8601
+        description: Time Cart was last updated.
+      currency:
+        $ref: "#/definitions/Currency"
+      tax_included:
+        type: boolean
+        description: Boolean representing if tax information is included.
+      base_amount:
+        type: number
+        description: Cost of cart before applying tax or shipping.
+      discount_amount:
+        type: number
+        description: Discounted amount.
+      taxes:
+        type: number
+      cart_total:
+        type: number
+      payment_status:
+        type: string
+      coupons:
+        type: array
+        items:
+          $ref: "#/definitions/AppliedCoupon"
+      discounts:
+        type: array
+        items:
+          $ref: "#/definitions/AppliedDiscount"
+      line_items:
+        type: array
+        items:
+          $ref: '#/definitions/LineItem'
+  Consignment:
+    description: "This allows us to have multiple shipping addresses. In the case there is only one shipping address then this array will contain only one value with all the items."
+    type: object
+    properties:
+      id:
+        type: string
+        format: UUID
+      shipping_address_id:
+        type: string
+        description: "One of the shipping addresses included in the checkout."
+      shipping_method_id:
+        type: string
+        description: "The ID of the selected shipping method/option for a given consignment."
+      shipping_cost: # We may consider to include a whole resource instead of just the cost
+        type: integer
+      line_item_ids:
+        type: array
+        items:
+          type: integer
+  Shopper:
+    description: "A shopper is either an existing customer or someone checking out as a guest"
+    properties:
+      customer_id:
+        type:
+          - string
+          - "null" # This is open to discussion. Internally we assign the ID = 0 to identify guest shopper. Not sure if we want to expose that
+        description: "Null if the shopper is a guest"
+        format: UUID
+      email:
+        type: string
+        format: email
+      title:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      phone:
+        type: string
+
+  Currency:
+    type: object
+    description: "This will always be the same between the cart and the checkout"
+    properties:
+      name:
+        type: string
+        description: "The currency name"
+      code:
+        type: string
+        description: "[ISO 4217](http://en.wikipedia.org/wiki/ISO_4217) currency code."
+      symbol:
+        type: string
+        description: "The currency symbol"
+  Address:
+    type: object
+    required:
+      - id
+      - locality
+      - country
+      - region
+      - postal_code
+    properties:
+      id:
+        type: string
+        format: UUID
+      locality:
+        type: string
+      region:
+        type: string
+      country:
+        type: string
+      postal_code:
+        type: string
+      street1:
+        type: string
+      street2:
+        type: string
+
+  LineItem:
+    type: object
+    required:
+      - quantity
+      - variant
+    properties:
+      id:
+        type: string
+        description: "The Line Item ID"
+        format: UUID
+      name:
+        type: string
+        description: "The item's product name"
+      description: # Probably we should truncate this value in the cart endpoint.
+        type: string
+        description: "The item's product description, which can include HTML"
+      storefront_url:
+        type: string
+        format: uri
+      variant:
+        type: object
+        required:
+          - id
+        properties:
+          id:
+            type: integer
+            description: "The Variant ID"
+          product_id:
+            type: integer
+            description: "The Product ID"
+          sku_id:
+            type:
+              - integer
+              - "null"
+            description: "The legacy SKU ID"
+          sku:
+            type:
+              - string
+          options:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                value_id:
+                  type: integer
+                value_label:
+                  type: string
+      modifiers:
+        type: array
+        items:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            value_id:
+              type:
+                - integer
+                - "null"
+            value_label:
+              type:
+              - string
+              - "null"
+            shopper_input:
+              type: string
+      quantity:
+        type: number
+      price:
+        type: number
+      sale_price:
+        type: number
+      retail_price:
+        type: number
+      require_shipping:
+        type: boolean
+      taxable:
+        type: boolean
+      img_url:
+        type: string
+        format: uri
+      base_amount:
+        type: number
+      discount_amount:
+        type: number
+        description: "The total value of all discounts applied to this item"
+      coupon_amount:
+        type: number
+        description: "The addition of all coupons applied to this item"
+      final_amount:
+        type: number
+      coupons:
+        type: array
+        items:
+          $ref: "#/definitions/AppliedCoupon"
+      discounts:
+        type: array
+        items:
+          $ref: "#/definitions/AppliedDiscount"
+      item_taxes:
+        type: string
+      item_tax_total:
+        type: number
+      item_total:
+        type: number
+
+  Tax:
+    type: object
+    properties:
+      item_id:
+        type: string
+        format: UUID
+      name:
+        type: string
+      amount:
+        type: number
+      percentage:
+        type: number
+      calculation_phase:
+        type: string
+        description: "Indicates whether the tax is calculated based on the subtotal or total."
+        enum:
+          - SUBTOTAL_PHASE
+          - TOTAL_PHASE
+          - OTHER
+  AppliedCoupon:
+    type: object
+    properties:
+      id:
+        type: string
+        description: "The coupon ID"
+        format: UUID
+      code:
+        type: string
+      name:
+        type: string
+        description: "The discount name given by the merchant"
+      slug:
+        type: string
+        description: "Automatically generated discount description"
+      coupon_type:
+        type: string
+        description: "Key name to identify the type of coupon"
+      discounted_amount:
+        type: number
+        description: "The discounted amount applied within a given context"
+      # message:
+      #   type: string
+      #   description: "The message this coupon may provide after applied"
+
+  AppliedDiscount:
+    type: object
+    properties:
+      id: # Considering to remove this one, given #promotion-manager constraints
+        type: string
+        description: "The discount ID"
+        format: UUID
+      name:
+        type: string
+        description: "The name provided by the merchant"
+      slug:
+        type: string
+        description: "Automatically generated discount description"
+      discounted_amount:
+        type: number
+        description: "The discounted amount applied within a given context"
+      # message:
+      #   type: string
+      #   description: "The message this discount may provide after applied"
+
+  GiftCertificate:
+    type: object
+    properties:
+      balance:
+        type: number
+      code:
+        type: string
+      purchaseDate:
+        type: string
+        format: date
+  Meta:
+    type: object
+
+  CheckoutError:
+    type: object
+    properties:
+      errors:
+        type: array
+        items:
+          $ref: '#/definitions/ErrorInner'
+
+  UnknownError:
+    description: "Something unexpected has happened that we don't have an error for"
+    type: object
+    properties:
+      status:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+      detail:
+        type: string
+
+  ErrorInner:
+    type: object
+    properties:
+      status:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+      detail:
+        type: string
+
